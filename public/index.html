@@ -1,0 +1,49 @@
+<!doctype html>
+<html>
+<head>
+<title>Web Audio</title>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+	const LENGTH = 2048
+	const CANVAS_WIDTH = 320
+	const CANVAS_HEIGHT = 200
+	const canvas = document.getElementById('canvas')
+	const cx = canvas.getContext('2d')
+	const ac = new AudioContext()
+	const analyser = ac.createAnalyser({fftSize: LENGTH})
+	const waveform = new Float32Array(LENGTH)
+
+	navigator.mediaDevices.getUserMedia({audio: true}).then((stream) => {
+		const msasn = ac.createMediaStreamSource(stream)
+		msasn.connect(analyser)
+
+		draw()
+	})
+
+
+	function draw() {
+		requestAnimationFrame(draw)
+		analyser.getFloatTimeDomainData(waveform)
+		cx.fillStyle = 'rgb(255, 255, 255)'
+		cx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
+		// TODO draw the data on the canvas
+		cx.beginPath()
+		for (var i = 0; i < 2048; i++) {
+			const x = i / LENGTH * CANVAS_WIDTH
+			// waveform[i] goes from -1 to 1 I guess
+			const y = waveform[i] * (CANVAS_HEIGHT / 2) + CANVAS_HEIGHT / 2
+			if (i == 0) {
+				cx.moveTo(x, y)
+			} else {
+				cx.lineTo(x, y)
+			}
+		}
+		cx.stroke()
+	}
+})
+</script>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+</body>
+</html>
