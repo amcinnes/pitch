@@ -2,16 +2,26 @@
 <html>
 <head>
 <title>Web Audio</title>
+<style>
+#canvas {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+}
+</style>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-	const LENGTH = 2048
-	const CANVAS_WIDTH = 320
-	const CANVAS_HEIGHT = 200
 	const canvas = document.getElementById('canvas')
 	const cx = canvas.getContext('2d')
 	const ac = new AudioContext()
-	const analyser = ac.createAnalyser({fftSize: LENGTH})
-	const waveform = new Float32Array(LENGTH)
+	const analyser = ac.createAnalyser({fftSize: 2048})
+	const waveform = new Float32Array(analyser.fftSize)
+
+	window.addEventListener('resize', resize)
+
+	resize()
 
 	navigator.mediaDevices.getUserMedia({audio: true}).then((stream) => {
 		const msasn = ac.createMediaStreamSource(stream)
@@ -20,18 +30,20 @@ document.addEventListener('DOMContentLoaded', () => {
 		draw()
 	})
 
+	function resize() {
+		canvas.width = canvas.scrollWidth
+		canvas.height = canvas.scrollHeight
+	}
 
 	function draw() {
 		requestAnimationFrame(draw)
 		analyser.getFloatTimeDomainData(waveform)
 		cx.fillStyle = 'rgb(255, 255, 255)'
-		cx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT)
-		// TODO draw the data on the canvas
+		cx.fillRect(0, 0, canvas.width, canvas.height)
 		cx.beginPath()
-		for (var i = 0; i < 2048; i++) {
-			const x = i / LENGTH * CANVAS_WIDTH
-			// waveform[i] goes from -1 to 1 I guess
-			const y = waveform[i] * (CANVAS_HEIGHT / 2) + CANVAS_HEIGHT / 2
+		for (var i = 0; i < analyser.fftSize; i++) {
+			const x = i / analyser.fftSize * canvas.width
+			const y = waveform[i] * (canvas.height / 2) + canvas.height / 2
 			if (i == 0) {
 				cx.moveTo(x, y)
 			} else {
