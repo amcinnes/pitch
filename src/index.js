@@ -15,27 +15,43 @@ document.addEventListener('DOMContentLoaded', () => {
   const pitch_buffer = new Float32Array(PITCH_BUFFER_FRAMES)
   const clarity_buffer = new Float32Array(PITCH_BUFFER_FRAMES)
 
-  const spn = ac.createScriptProcessor(W, 1, 1)
+  const spn = ac.createScriptProcessor(0, 1, 1)
+  const inputBuffer = new Float32Array(W + spn.bufferSize)
+  var inputBufferAmount = 0
+
+  const WINDOW_SHIFT_AMOUNT = 512 // must be less than W
+
   spn.onaudioprocess = (ape) => {
-    // just copy input data to waveform
-    // (this will be more useful later when we're doing overlapping windows or something)
-    // TODO overlapping windows
+    // Append new data onto inputBuffer and increment inputBufferAmount
     const inputData = ape.inputBuffer.getChannelData(0)
-    for (var i = 0; i < W; i++) {
-      waveform[i] = inputData[i]
+    for (var i = 0; i < inputData.length; i++) {
+      inputBuffer[inputBufferAmount + i] = inputData[i]
     }
+    inputBufferAmount += inputData.length
+    console.log('Adding ' + inputData.length + ' samples')
 
-    const result = get_pitch(waveform, ape.inputBuffer.sampleRate)
+    while (inputBufferAmount >= W) {
+      // process that data
+      for (var i = 0; i < W; i++) {
+        waveform[i] = inputBuffer[i]
+      }
+      const result = get_pitch(waveform, ape.inputBuffer.sampleRate)
+      // Shift buffers along
+      // We could be efficient and use circular buffers, but it isn't needed
+      for (var i = 0; i < PITCH_BUFFER_FRAMES - 1; i++) {
+        pitch_buffer[i] = pitch_buffer[i+1]
+        clarity_buffer[i] = clarity_buffer[i+1]
+      }
+      pitch_buffer[PITCH_BUFFER_FRAMES - 1] = result.note
+      clarity_buffer[PITCH_BUFFER_FRAMES - 1] = result.clarity
 
-    // Shift buffers along
-    // We could be efficient and use circular buffers, but it isn't needed
-    for (var i = 0; i < PITCH_BUFFER_FRAMES - 1; i++) {
-      pitch_buffer[i] = pitch_buffer[i+1]
-      clarity_buffer[i] = clarity_buffer[i+1]
+      // remove it from inputBuffer and decrement inputBufferAmount by W
+      inputBufferAmount -= WINDOW_SHIFT_AMOUNT
+      console.log('Removing ' + WINDOW_SHIFT_AMOUNT + ' samples')
+      for (var i = 0; i < inputBufferAmount; i++) {
+        inputBuffer[i] = inputBuffer[i + WINDOW_SHIFT_AMOUNT]
+      }
     }
-
-    pitch_buffer[PITCH_BUFFER_FRAMES - 1] = result.note
-    clarity_buffer[PITCH_BUFFER_FRAMES - 1] = result.clarity
   }
 
   window.addEventListener('resize', resize)
@@ -58,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function draw() {
+    // TODO more meaningful drawing
     requestAnimationFrame(draw)
     cx.fillStyle = 'rgb(255, 255, 255)'
     cx.fillRect(0, 0, canvas.width, canvas.height)
