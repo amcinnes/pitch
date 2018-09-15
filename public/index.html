@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	spn.onaudioprocess = (ape) => {
 		// just copy input data to waveform
 		// (this will be more useful later when we're doing overlapping windows or something)
+		// TODO overlapping windows
 		const inputData = ape.inputBuffer.getChannelData(0)
 		for (var i = 0; i < W; i++) {
 			waveform[i] = inputData[i]
@@ -35,7 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		// calculate m
 		calculate_m(waveform, m)
 		// TODO calculate r
-		// TODO divide them
+		// TODO divide them to get NSDF
 	}
 
 	window.addEventListener('resize', resize)
