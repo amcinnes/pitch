@@ -21,6 +21,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const WINDOW_SHIFT_AMOUNT = 512 // must be less than W
 
+  const MIN_NOTE = 37.5 // just below D2
+  const MAX_NOTE = 72.5 // just above C5
+
   spn.onaudioprocess = (ape) => {
     // Append new data onto inputBuffer and increment inputBufferAmount
     const inputData = ape.inputBuffer.getChannelData(0)
@@ -28,7 +31,6 @@ document.addEventListener('DOMContentLoaded', () => {
       inputBuffer[inputBufferAmount + i] = inputData[i]
     }
     inputBufferAmount += inputData.length
-    console.log('Adding ' + inputData.length + ' samples')
 
     while (inputBufferAmount >= W) {
       // process that data
@@ -47,7 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // remove it from inputBuffer and decrement inputBufferAmount by W
       inputBufferAmount -= WINDOW_SHIFT_AMOUNT
-      console.log('Removing ' + WINDOW_SHIFT_AMOUNT + ' samples')
       for (var i = 0; i < inputBufferAmount; i++) {
         inputBuffer[i] = inputBuffer[i + WINDOW_SHIFT_AMOUNT]
       }
@@ -73,16 +74,28 @@ document.addEventListener('DOMContentLoaded', () => {
     canvas.height = canvas.scrollHeight
   }
 
+  function note_name(note_number) {
+    const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    return names[note_number % 12] + (Math.floor(note_number / 12) - 1)
+  }
+
   function draw() {
-    // TODO more meaningful drawing
     requestAnimationFrame(draw)
+    // Clear
     cx.fillStyle = 'rgb(255, 255, 255)'
     cx.fillRect(0, 0, canvas.width, canvas.height)
+    // Border
+    cx.strokeStyle = 'rgb(0, 0, 0)'
+    cx.beginPath()
+    cx.moveTo(0, canvas.height/4)
+    cx.lineTo(canvas.width, canvas.height/4)
+    cx.stroke()
+    // In the top 1/4 of the canvas, draw the NSDF
     cx.strokeStyle = 'rgb(0, 0, 0)'
     cx.beginPath()
     for (var i = 0; i < MAX_TAU; i++) {
       const x = i / MAX_TAU * canvas.width
-      const y = - nsdf[i] * (canvas.height / 2) + canvas.height / 2
+      const y = - nsdf[i] * (canvas.height / 8) + canvas.height / 8
       if (i == 0) {
         cx.moveTo(x, y)
       } else {
@@ -90,11 +103,27 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     cx.stroke()
+    cx.strokeStyle = 'rgb(192, 192, 192)'
+    cx.fillStyle = 'rgb(0, 0, 0)'
+    cx.font = '16px sans-serif'
+    for (var i = Math.floor(MIN_NOTE); i < MAX_NOTE; i++) {
+      // Draw a line dividing this note from the next
+      const x = (i + 0.5 - MIN_NOTE) / (MAX_NOTE - MIN_NOTE) * canvas.width
+      cx.beginPath()
+      cx.moveTo(x, canvas.height / 4)
+      cx.lineTo(x, canvas.height)
+      cx.stroke()
+      // Labels
+      const measured = cx.measureText(note_name(i))
+      const textX = (i - MIN_NOTE) / (MAX_NOTE - MIN_NOTE) * canvas.width
+      cx.fillText(note_name(i), textX - measured.width / 2, canvas.height - 20)
+    }
+    // In the lower 3/4 of the canvas, draw the pitch graph
     cx.beginPath()
     for (var i = 0; i < PITCH_BUFFER_FRAMES; i++) {
-      const x = pitch_buffer[i] / 128 * canvas.width
-      const y = i / PITCH_BUFFER_FRAMES * canvas.height
-      const y2 = (i + 1) / PITCH_BUFFER_FRAMES * canvas.height
+      const x = (pitch_buffer[i] - MIN_NOTE) / (MAX_NOTE - MIN_NOTE) * canvas.width
+      const y = i / PITCH_BUFFER_FRAMES * (3*canvas.height/4) + canvas.height/4
+      const y2 = (i + 1) / PITCH_BUFFER_FRAMES * (3*canvas.height/4) + canvas.height/4
       if (clarity_buffer[i] > 0.7) {
         cx.beginPath()
         cx.moveTo(x, y)
@@ -210,7 +239,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const period = calculate_maximum(nsdf)
     const result = parabolic_interpolation(period, nsdf)
     const frequency = sampleRate / result.x
-    const note = 12 * Math.log(frequency / 440) + 69
+    const note = 12 * Math.log(frequency / 440) / Math.log(2) + 69
     return {note: note, clarity: result.y}
   }
 
