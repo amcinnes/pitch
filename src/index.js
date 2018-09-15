@@ -120,14 +120,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // In the lower 3/4 of the canvas, draw the pitch graph
     cx.beginPath()
-    for (var i = 0; i < PITCH_BUFFER_FRAMES; i++) {
-      const x = (pitch_buffer[i] - MIN_NOTE) / (MAX_NOTE - MIN_NOTE) * canvas.width
-      const y = i / PITCH_BUFFER_FRAMES * (3*canvas.height/4) + canvas.height/4
+    for (var i = 0; i < PITCH_BUFFER_FRAMES - 1; i++) {
+      // If previous is close to current, draw a continuous line
+      const x1 = (pitch_buffer[i] - MIN_NOTE) / (MAX_NOTE - MIN_NOTE) * canvas.width
+      const x2 = (pitch_buffer[i + 1] - MIN_NOTE) / (MAX_NOTE - MIN_NOTE) * canvas.width
+      const y1 = i / PITCH_BUFFER_FRAMES * (3*canvas.height/4) + canvas.height/4
       const y2 = (i + 1) / PITCH_BUFFER_FRAMES * (3*canvas.height/4) + canvas.height/4
       if (clarity_buffer[i] > 0.7) {
         cx.beginPath()
-        cx.moveTo(x, y)
-        cx.lineTo(x, y2)
+        if (Math.abs(pitch_buffer[i] - pitch_buffer[i+1]) < 1) cx.moveTo(x1, y1)
+        else cx.moveTo(x2, y1)
+        cx.lineTo(x2, y2)
         cx.strokeStyle = 'rgba(255, 0, 0, ' + (clarity_buffer[i] - 0.7) / 0.3 + ')'
         cx.stroke()
       }
