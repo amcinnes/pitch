@@ -11,7 +11,9 @@ document.addEventListener('DOMContentLoaded', () => {
 	const waveform = new Float32Array(W)
   const nsdf = new Float32Array(MAX_TAU)
 
-  var period
+  const PITCH_BUFFER_FRAMES = 200
+  const pitch_buffer = new Float32Array(PITCH_BUFFER_FRAMES)
+  const clarity_buffer = new Float32Array(PITCH_BUFFER_FRAMES)
 
 	const spn = ac.createScriptProcessor(W, 1, 1)
 	spn.onaudioprocess = (ape) => {
@@ -22,12 +24,19 @@ document.addEventListener('DOMContentLoaded', () => {
 		for (var i = 0; i < W; i++) {
 			waveform[i] = inputData[i]
 		}
-		calculate_nsdf(waveform, nsdf)
-    // TODO get period out of that...
 
+    // Shift buffers along
+    // We could be efficient and use circular buffers, but it isn't needed
+    for (var i = 0; i < PITCH_BUFFER_FRAMES - 1; i++) {
+      pitch_buffer[i] = pitch_buffer[i+1]
+      clarity_buffer[i] = clarity_buffer[i+1]
+    }
+
+		calculate_nsdf(waveform, nsdf)
     // find maximum after the first negative zero crossing
     var foundFirstZero = false
     var max = 0
+    var period
     for (var i = 0; i < MAX_TAU; i++) {
       if (nsdf[i] < 0) foundFirstZero = true
       if (foundFirstZero && nsdf[i] > max) {
@@ -35,11 +44,11 @@ document.addEventListener('DOMContentLoaded', () => {
         period = i
       }
     }
-    // TODO clarity filter
     // TODO find the first key maximum that is higher than k * overall maximum, and set that as the period
     // [not yet] parabolic interpolation
+    pitch_buffer[PITCH_BUFFER_FRAMES - 1] = period
+    clarity_buffer[PITCH_BUFFER_FRAMES - 1] = nsdf[period]
     // [not yet] convert number of samples to a note
-    // [not yet] maintain a circular buffer that we can graph on the canvas
 	}
 
 	window.addEventListener('resize', resize)
@@ -77,11 +86,19 @@ document.addEventListener('DOMContentLoaded', () => {
 			}
 		}
 		cx.stroke()
-		cx.beginPath()
-    cx.moveTo(period / MAX_TAU * canvas.width, 0)
-    cx.lineTo(period / MAX_TAU * canvas.width, canvas.height)
-		cx.strokeStyle = 'rgb(255, 0, 0)'
-    cx.stroke()
+    cx.beginPath()
+    for (var i = 0; i < PITCH_BUFFER_FRAMES; i++) {
+			const x = pitch_buffer[i] / MAX_TAU * canvas.width
+			const y = i / PITCH_BUFFER_FRAMES * canvas.height
+			const y2 = (i + 1) / PITCH_BUFFER_FRAMES * canvas.height
+      if (clarity_buffer[i] > 0.7) {
+        cx.beginPath()
+        cx.moveTo(x, y)
+        cx.lineTo(x, y2)
+        cx.strokeStyle = 'rgba(255, 0, 0, ' + (clarity_buffer[i] - 0.7) / 0.3 + ')'
+        cx.stroke()
+      }
+    }
 	}
 
 	// Begin pitch detection algorithm code
@@ -127,7 +144,7 @@ document.addEventListener('DOMContentLoaded', () => {
     calculate_m(waveform, m)
     calculate_r(waveform, r)
     for (var i = 0; i < MAX_TAU; i++) {
-      nsdf[i] = r[i] / m[i]
+      nsdf[i] = 2 * r[i] / m[i]
     }
   }
 
