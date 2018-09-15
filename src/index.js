@@ -1,17 +1,5 @@
-<!doctype html>
-<html>
-<head>
-<title>Web Audio</title>
-<style>
-#canvas {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
-}
-</style>
-<script>
+import * as dsp from 'dsp.js'
+
 document.addEventListener('DOMContentLoaded', () => {
 	const W = 2048
 	const MAX_TAU = W / 2
@@ -91,9 +79,3 @@ document.addEventListener('DOMContentLoaded', () => {
 	}
 
 })
-</script>
-</head>
-<body>
-<canvas id="canvas"></canvas>
-</body>
-</html>
