@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const waveform = new Float32Array(W)
   const nsdf = new Float32Array(MAX_TAU)
 
-  const PITCH_BUFFER_FRAMES = 200
+  const PITCH_BUFFER_FRAMES = 400
   const pitch_buffer = new Float32Array(PITCH_BUFFER_FRAMES)
   const clarity_buffer = new Float32Array(PITCH_BUFFER_FRAMES)
 
@@ -25,6 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
       waveform[i] = inputData[i]
     }
 
+    const result = get_pitch(waveform, ape.inputBuffer.sampleRate)
+
     // Shift buffers along
     // We could be efficient and use circular buffers, but it isn't needed
     for (var i = 0; i < PITCH_BUFFER_FRAMES - 1; i++) {
@@ -32,49 +34,8 @@ document.addEventListener('DOMContentLoaded', () => {
       clarity_buffer[i] = clarity_buffer[i+1]
     }
 
-    calculate_nsdf(waveform, nsdf)
-    // Find the first downwards zero crossing
-    var firstNegative
-    for (var i = 0; i < MAX_TAU; i++) {
-      if (nsdf[i] < 0) {
-        firstNegative = i
-        break
-      }
-    }
-    // find maximum after the first negative zero crossing
-    var max = 0
-    for (var i = firstNegative; i < MAX_TAU; i++) {
-      if (nsdf[i] > max) {
-        max = nsdf[i]
-      }
-    }
-    // Find the first key maximum that is higher than k * overall maximum, and set that as the period
-    const k = 0.8
-    var keyMax = 0
-    var period
-    for (var i = firstNegative; i < MAX_TAU; i++) {
-      // if we reach a zero crossing, going downwards, and it's after we've found the first zero,
-      if (nsdf[i] < 0 && nsdf[i-1] >= 0) {
-        // see what the previous maximum was. If it meets the condition, use it.
-        if (keyMax > k * max) {
-          break
-        } else {
-          // otherwise, reset the maximum to 0 and continue
-          keyMax = 0
-        }
-      }
-      if (nsdf[i] > keyMax) {
-        keyMax = nsdf[i]
-        period = i
-      }
-    }
-
-    const result = parabolic_interpolation(period, nsdf)
-
-    pitch_buffer[PITCH_BUFFER_FRAMES - 1] = result.x
-    clarity_buffer[PITCH_BUFFER_FRAMES - 1] = result.y
-
-    // [not yet] convert number of samples to a note
+    pitch_buffer[PITCH_BUFFER_FRAMES - 1] = result.note
+    clarity_buffer[PITCH_BUFFER_FRAMES - 1] = result.clarity
   }
 
   window.addEventListener('resize', resize)
@@ -114,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
     cx.stroke()
     cx.beginPath()
     for (var i = 0; i < PITCH_BUFFER_FRAMES; i++) {
-      const x = pitch_buffer[i] / MAX_TAU * canvas.width
+      const x = pitch_buffer[i] / 128 * canvas.width
       const y = i / PITCH_BUFFER_FRAMES * canvas.height
       const y2 = (i + 1) / PITCH_BUFFER_FRAMES * canvas.height
       if (clarity_buffer[i] > 0.7) {
@@ -185,6 +146,55 @@ document.addEventListener('DOMContentLoaded', () => {
     const x = -b / (2 * a)
     const y = a * x * x + b * x + y0
     return {x: x + i, y: y}
+  }
+
+  function calculate_maximum(nsdf) {
+    // Find the first downwards zero crossing
+    var firstNegative
+    for (var i = 0; i < MAX_TAU; i++) {
+      if (nsdf[i] < 0) {
+        firstNegative = i
+        break
+      }
+    }
+    // find maximum after the first negative zero crossing
+    var max = 0
+    for (var i = firstNegative; i < MAX_TAU; i++) {
+      if (nsdf[i] > max) {
+        max = nsdf[i]
+      }
+    }
+    // Find the first key maximum that is higher than k * overall maximum, and set that as the period
+    const k = 0.8
+    var keyMax = 0
+    var period
+    for (var i = firstNegative; i < MAX_TAU; i++) {
+      // if we reach a zero crossing, going downwards, and it's after we've found the first zero,
+      if (nsdf[i] < 0 && nsdf[i-1] >= 0) {
+        // see what the previous maximum was. If it meets the condition, use it.
+        if (keyMax > k * max) {
+          break
+        } else {
+          // otherwise, reset the maximum to 0 and continue
+          keyMax = 0
+        }
+      }
+      if (nsdf[i] > keyMax) {
+        keyMax = nsdf[i]
+        period = i
+      }
+    }
+
+    return period
+  }
+
+  function get_pitch(waveform, sampleRate) {
+    calculate_nsdf(waveform, nsdf)
+    const period = calculate_maximum(nsdf)
+    const result = parabolic_interpolation(period, nsdf)
+    const frequency = sampleRate / result.x
+    const note = 12 * Math.log(frequency / 440) + 69
+    return {note: note, clarity: result.y}
   }
 
 })
