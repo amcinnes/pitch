@@ -9,8 +9,9 @@ document.addEventListener('DOMContentLoaded', () => {
 	const ac = new AudioContext()
 
 	const waveform = new Float32Array(W)
-	const m = new Float32Array(MAX_TAU)
-	const cumulative_squares = new Float32Array(W + 1)
+  const nsdf = new Float32Array(MAX_TAU)
+
+  var period
 
 	const spn = ac.createScriptProcessor(W, 1, 1)
 	spn.onaudioprocess = (ape) => {
@@ -21,10 +22,24 @@ document.addEventListener('DOMContentLoaded', () => {
 		for (var i = 0; i < W; i++) {
 			waveform[i] = inputData[i]
 		}
-		// calculate m
-		calculate_m(waveform, m)
-		// TODO calculate r
-		// TODO divide them to get NSDF
+		calculate_nsdf(waveform, nsdf)
+    // TODO get period out of that...
+
+    // find maximum after the first negative zero crossing
+    var foundFirstZero = false
+    var max = 0
+    for (var i = 0; i < MAX_TAU; i++) {
+      if (nsdf[i] < 0) foundFirstZero = true
+      if (foundFirstZero && nsdf[i] > max) {
+        max = nsdf[i]
+        period = i
+      }
+    }
+    // TODO clarity filter
+    // TODO find the first key maximum that is higher than k * overall maximum, and set that as the period
+    // [not yet] parabolic interpolation
+    // [not yet] convert number of samples to a note
+    // [not yet] maintain a circular buffer that we can graph on the canvas
 	}
 
 	window.addEventListener('resize', resize)
@@ -50,10 +65,11 @@ document.addEventListener('DOMContentLoaded', () => {
 		requestAnimationFrame(draw)
 		cx.fillStyle = 'rgb(255, 255, 255)'
 		cx.fillRect(0, 0, canvas.width, canvas.height)
+		cx.strokeStyle = 'rgb(0, 0, 0)'
 		cx.beginPath()
 		for (var i = 0; i < MAX_TAU; i++) {
 			const x = i / MAX_TAU * canvas.width
-			const y = - m[i] / W * 10 * (canvas.height / 2) + canvas.height / 2
+			const y = - nsdf[i] * (canvas.height / 2) + canvas.height / 2
 			if (i == 0) {
 				cx.moveTo(x, y)
 			} else {
@@ -61,9 +77,16 @@ document.addEventListener('DOMContentLoaded', () => {
 			}
 		}
 		cx.stroke()
+		cx.beginPath()
+    cx.moveTo(period / MAX_TAU * canvas.width, 0)
+    cx.lineTo(period / MAX_TAU * canvas.width, canvas.height)
+		cx.strokeStyle = 'rgb(255, 0, 0)'
+    cx.stroke()
 	}
 
 	// Begin pitch detection algorithm code
+
+	const cumulative_squares = new Float32Array(W + 1)
 
 	// Given a block of waveform data of size W, calculate m(tau), for each tau from 0 to MAX_TAU - 1
 	function calculate_m(waveform, m) {
@@ -77,5 +100,35 @@ document.addEventListener('DOMContentLoaded', () => {
 			m[i] = cumulative_squares[W - i] + cumulative_squares[W] - cumulative_squares[i]
 		}
 	}
+
+  const fft = new dsp.FFT(W * 2)
+  const fft_input = new Float32Array(W * 2)
+  const imag = new Float32Array(W * 2) // just zeros
+  const real = new Float32Array(W * 2)
+
+  function calculate_r(waveform, r) {
+    for (var i = 0; i < W; i++) {
+      fft_input[i] = waveform[i]
+    }
+    fft.forward(fft_input)
+    for (var i = 0; i < W * 2; i++) {
+      real[i] = fft.real[i] * fft.real[i] + fft.imag[i] * fft.imag[i]
+    }
+    const result = fft.inverse(real, imag)
+    for (var i = 0; i < MAX_TAU; i++) {
+      r[i] = result[i]
+    }
+  }
+
+	const m = new Float32Array(MAX_TAU)
+  const r = new Float32Array(MAX_TAU)
+
+  function calculate_nsdf(waveform, nsdf) {
+    calculate_m(waveform, m)
+    calculate_r(waveform, r)
+    for (var i = 0; i < MAX_TAU; i++) {
+      nsdf[i] = r[i] / m[i]
+    }
+  }
 
 })
